@@ -1,28 +1,9 @@
-"""
-MiniOS - Feature 3: File Management
------------------------------------
-A virtual file system that is mirrored into a REAL folder (MiniOS_Disk) next to
-this script, so files and directories really appear in File Explorer.
-The program never touches anything outside that folder.
-
-Required commands : dir, mkdir, create, read, delete
-Extra commands    : write, append, rename, cd, pwd, copy, move, tree, help
-
-HOW THE CLI TEAMMATE USES THIS MODULE
-    from file_management import FileManager, FSError
-    fm = FileManager()
-    fm.current_user = "admin"            # set after login (User Management)
-    output = fm.execute("mkdir", ["Documents"])   # returns a string to print
-    # unknown command -> raises FSError("Unknown command") ; use fm.COMMANDS to check
-
-RUN STANDALONE (to test your part):  python file_management.py
-"""
-
-"""TEST12323123123123123123 for push"""
+"""Command-line MiniOS simulator with a disk-backed virtual file system."""
 
 import os
 import shlex
 import shutil
+import struct
 from datetime import datetime
 
 
@@ -504,36 +485,130 @@ class FileManager:
         return HELP_TEXT
 
 
-# --------------------------------------------------------------------------
-# Standalone test shell (your CLI teammate will replace this with the real one)
-# --------------------------------------------------------------------------
-def run_standalone():
-    fm = FileManager()
-    print("MiniOS File Management test shell. Type 'fhelp' for commands, 'exit' to quit.")
-    print(f"Real files are stored in: {fm.disk.root}")
-    while True:
+class MiniOS:
+    def __init__(self, file_manager=None):
+        self.file_manager = file_manager or FileManager()
+        self.commands = {}
+        self.register_command("help", self._help, "Show available commands")
+        self.register_command("clear", self._clear, "Clear the screen")
+        self.register_command("date", self._date, "Show the current date")
+        self.register_command("time", self._time, "Show the current time")
+        self.register_command("whoami", self._whoami, "Show the current user")
+        self.register_command("systeminfo", self._systeminfo,
+                              "Show simulated system information")
+        self.register_command("exit", self._exit, "Shut down MiniOS")
+
+    def register_command(self, name, handler, description):
+        """Register a command so additional MiniOS features can be integrated."""
+        name = name.strip().lower()
+        if not name or any(char.isspace() for char in name):
+            raise ValueError("Command names must be non-empty and contain no spaces.")
+        self.commands[name] = (handler, description)
+
+    def execute_line(self, line):
+        """Run one command line and return False when the shell should exit."""
         try:
-            line = input(fm.prompt()).strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not line:
-            continue
-        if line.lower() in ("exit", "quit"):
-            break
-        try:
-            # backslashes -> slashes first so Windows paths survive shlex
             parts = shlex.split(line.replace("\\", "/"))
-        except ValueError:
-            print("Error: unbalanced quotes.")
-            continue
-        try:
-            out = fm.execute(parts[0], parts[1:])
-            if out:
-                print(out)
-        except FSError as e:
-            print(f"Error: {e}")
+        except ValueError as error:
+            print(f"Error: {error}")
+            return True
+
+        if not parts:
+            return True
+
+        command, args = parts[0].lower(), parts[1:]
+        registered = self.commands.get(command)
+        if registered is not None:
+            handler, _ = registered
+            try:
+                output = handler(args)
+            except FSError as error:
+                print(f"Error: {error}")
+                return True
+        elif command in FileManager.COMMANDS:
+            try:
+                output = self.file_manager.execute(command, args)
+            except FSError as error:
+                print(f"Error: {error}")
+                return True
+        else:
+            print(f"Error: '{command}' is not recognized. Type 'help' for commands.")
+            return True
+
+        if output:
+            print(output)
+        return command != "exit"
+
+    def _help(self, args):
+        if args:
+            raise FSError("Usage: help")
+
+        lines = ["Available Commands:"]
+        lines.extend(
+            f"  {name:<12} {description}"
+            for name, (_, description) in sorted(self.commands.items())
+        )
+        lines.extend(["", HELP_TEXT])
+        return "\n".join(lines)
+
+    @staticmethod
+    def _clear(args):
+        if args:
+            raise FSError("Usage: clear")
+        os.system("cls" if os.name == "nt" else "clear")
+
+    @staticmethod
+    def _date(args):
+        if args:
+            raise FSError("Usage: date")
+        return datetime.now().strftime("%Y-%m-%d")
+
+    @staticmethod
+    def _time(args):
+        if args:
+            raise FSError("Usage: time")
+        return datetime.now().strftime("%H:%M:%S")
+
+    def _whoami(self, args):
+        if args:
+            raise FSError("Usage: whoami")
+        return self.file_manager.current_user
+
+    def _systeminfo(self, args):
+        if args:
+            raise FSError("Usage: systeminfo")
+        architecture = struct.calcsize("P") * 8
+        return (
+            "========================================\n"
+            "          SYSTEM INFORMATION\n"
+            "========================================\n\n"
+            "OS Name: MiniOS Alpha\n"
+            "Version: 1.0\n"
+            f"Architecture: {architecture}-bit\n"
+            "CPU: Virtual CPU\n"
+            "Memory: 1024 MB\n"
+            f"User: {self.file_manager.current_user}\n\n"
+            "========================================"
+        )
+
+    @staticmethod
+    def _exit(args):
+        if args:
+            raise FSError("Usage: exit")
+        return "Shutting down MiniOS...\n\nGoodbye!"
+
+    def run(self):
+        print("MiniOS Alpha")
+        while True:
+            try:
+                line = input(self.file_manager.prompt())
+            except (EOFError, KeyboardInterrupt):
+                print()
+                print(self._exit([]))
+                return
+            if not self.execute_line(line):
+                return
 
 
 if __name__ == "__main__":
-    run_standalone()
+    MiniOS().run()
