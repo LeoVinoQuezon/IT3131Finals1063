@@ -484,6 +484,69 @@ class FileManager:
     def _cmd_fhelp(self, args):
         return HELP_TEXT
 
+# --------------------------------------------------------------------------
+# Memory management (simulated pool of RAM, measured in MB)
+# --------------------------------------------------------------------------
+class InvalidMemoryRequest(FSError):
+    pass
+
+
+class OutOfMemory(FSError):
+    pass
+
+
+class MemoryManager:
+    """Simulates a fixed pool of memory. Part of it is reserved for the
+    'system'; users can only allocate and free the rest."""
+
+    def __init__(self, total_mb=1024, system_mb=256):
+        self.total = total_mb
+        self.system = system_mb      # reserved, can never be freed
+        self.allocated = 0           # memory handed out by 'allocate'
+
+    @property
+    def used(self):
+        return self.system + self.allocated
+
+    @property
+    def free(self):
+        return self.total - self.used
+
+    @staticmethod
+    def parse_amount(args, usage):
+        if len(args) != 1:
+            raise InvalidMemoryRequest(f"Usage: {usage}")
+        try:
+            amount = int(args[0])
+        except ValueError:
+            raise InvalidMemoryRequest(
+                f"'{args[0]}' is not a valid whole number of MB. Usage: {usage}")
+        if amount <= 0:
+            raise InvalidMemoryRequest("Amount must be greater than 0.")
+        return amount
+
+    def allocate(self, mb):
+        if mb > self.free:
+            raise OutOfMemory(f"Not enough memory. Requested {mb} MB, "
+                              f"only {self.free} MB free.")
+        self.allocated += mb
+
+    def release(self, mb):
+        if mb > self.allocated:
+            raise InvalidMemoryRequest(
+                f"Cannot free {mb} MB. Only {self.allocated} MB of "
+                "user-allocated memory is in use "
+                f"({self.system} MB is reserved by the system).")
+        self.allocated -= mb
+
+    def status(self):
+        return (
+            "Memory Status\n"
+            "------------------------\n"
+            f"{'Total Memory:':<14}{self.total:>4} MB\n"
+            f"{'Used Memory:':<14}{self.used:>4} MB\n"
+            f"{'Free Memory:':<14}{self.free:>4} MB"
+        )
 
 class MiniOS:
     def __init__(self, file_manager=None):
@@ -497,7 +560,14 @@ class MiniOS:
         self.register_command("systeminfo", self._systeminfo,
                               "Show simulated system information")
         self.register_command("exit", self._exit, "Shut down MiniOS")
-
+# --------------------------------------------------------------------------MEMORY MANAGEMENT 
+        self.memory = MemoryManager()
+        self.register_command("memory", self._memory, "Show memory status")
+        self.register_command("allocate", self._allocate,
+                              "Allocate memory: allocate <MB>")
+        self.register_command("free", self._free,
+                              "Release memory: free <MB>")
+# --------------------------------------------------------------------------
     def register_command(self, name, handler, description):
         """Register a command so additional MiniOS features can be integrated."""
         name = name.strip().lower()
@@ -550,7 +620,22 @@ class MiniOS:
         )
         lines.extend(["", HELP_TEXT])
         return "\n".join(lines)
+# --------------------------------------------------------------------------MEMORY MANAGEMENT
+    def _memory(self, args):
+        if args:
+            raise FSError("Usage: memory")
+        return self.memory.status()
 
+    def _allocate(self, args):
+        mb = MemoryManager.parse_amount(args, "allocate <MB>")
+        self.memory.allocate(mb)
+        return f"{mb} MB allocated."
+
+    def _free(self, args):
+        mb = MemoryManager.parse_amount(args, "free <MB>")
+        self.memory.release(mb)
+        return f"{mb} MB released."
+# --------------------------------------------------------------------------
     @staticmethod
     def _clear(args):
         if args:
