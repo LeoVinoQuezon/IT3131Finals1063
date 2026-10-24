@@ -2,6 +2,7 @@
 
 import os
 import shlex
+import getpass
 import shutil
 import struct
 from datetime import datetime
@@ -549,6 +550,11 @@ class MemoryManager:
         )
 
 class MiniOS:
+    USER_ACCOUNTS = {
+        "admin": "admin123",
+        "student": "student123",
+    }
+
     def __init__(self, file_manager=None):
         self.file_manager = file_manager or FileManager()
         self.commands = {}
@@ -682,7 +688,32 @@ class MiniOS:
             raise FSError("Usage: exit")
         return "Shutting down MiniOS...\n\nGoodbye!"
 
+    def _login(self):
+        print("========================================")
+        print("             MiniOS LOGIN")
+        print("========================================")
+        print("Available accounts: admin, student")
+        print("Enter your credentials to continue.\n")
+
+        while True:
+            try:
+                username = input("Username: ").strip()
+                password = getpass.getpass("Password: ")
+            except (EOFError, KeyboardInterrupt):
+                print("\nLogin cancelled.")
+                return False
+
+            expected_password = self.USER_ACCOUNTS.get(username)
+            if expected_password is not None and password == expected_password:
+                self.file_manager.current_user = username
+                print(f"\nLogin successful. Welcome, {username}!\n")
+                return True
+
+            print("Invalid username or password. Please try again.\n")
+
     def run(self):
+        if not self._login():
+            return
         print("MiniOS Alpha")
         while True:
             try:
@@ -692,6 +723,11 @@ class MiniOS:
                 print(self._exit([]))
                 return
             if not self.execute_line(line):
+                return
+
+
+if __name__ == "__main__":
+    MiniOS().run()
                 return
 
 
