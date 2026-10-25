@@ -1,4 +1,4 @@
-# MiniOS simulator
+# MiniOS alpha
 
 ## Group Members
 
@@ -13,7 +13,7 @@ Add the names of all group members below:
 
 ## Project Description
 
-MiniOS simulator is a Python-based command-line operating system simulator. It provides a terminal-style interface where users can log in and try basic operating-system concepts, including file and directory management, simulated memory allocation, and simulated process management. It also provides basic utilities such as displaying the current user, date, time, and simulated system information.
+MiniOS alpha is a Python-based command-line operating system simulator. It provides a terminal-style interface where users can log in and try basic operating-system concepts, including file and directory management, simulated memory allocation, and simulated process management. It also provides basic utilities such as displaying the current user, date, time, and simulated system information.
 
 MiniOS is a learning project, not a full operating system. Its memory and process features are simulated and do not allocate the computer's actual RAM or launch and terminate real applications.
 
