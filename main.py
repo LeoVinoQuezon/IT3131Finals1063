@@ -549,6 +549,56 @@ class MemoryManager:
             f"{'Free Memory:':<14}{self.free:>4} MB"
         )
 
+# --------------------------------------------------------------------------
+# Process Management (process, run, kill) - newly implemented
+# --------------------------------------------------------------------------
+class ProcessManager:
+    """Simulates a small process table for the MiniOS command shell."""
+
+    def __init__(self):
+        # Keep the core MiniOS processes present and protected.
+        self.processes = [
+            {"pid": 1, "name": "system_idle", "status": "RUNNING"},
+            {"pid": 2, "name": "shell", "status": "RUNNING"},
+        ]
+        # New processes receive increasing process IDs.
+        self.next_pid = 3
+
+    def list_processes(self):
+        # Format the process table for terminal output.
+        lines = [f"\n{'PID':<6} {'NAME':<15} {'STATUS':<10}", "-" * 33]
+        for process in self.processes:
+            lines.append(f"{process['pid']:<6} {process['name']:<15} {process['status']:<10}")
+        return "\n".join(lines)
+
+    def run_process(self, name):
+        # Do not create a process without a name.
+        if not name.strip():
+            raise FSError("Process name cannot be empty.")
+        new_process = {"pid": self.next_pid, "name": name.strip(), "status": "RUNNING"}
+        self.processes.append(new_process)
+        self.next_pid += 1
+        return ("Process started.\n\n"
+                f"PID: {new_process['pid']}\n"
+                f"Name: {new_process['name']}\n"
+                f"Status: {new_process['status']}")
+
+    def kill_process(self, pid_str):
+        # Validate that the supplied PID is numeric.
+        try:
+            pid = int(pid_str)
+        except (TypeError, ValueError):
+            raise FSError("Invalid PID format. Please provide a numeric PID.")
+        # Never allow the core system processes to be terminated.
+        for process in self.processes:
+            if process["pid"] == pid:
+                if process["pid"] <= 2 and process["name"] in ("system_idle", "shell"):
+                    raise FSError(f"Cannot terminate core system process '{process['name']}'.")
+                self.processes.remove(process)
+                return f"Process {pid} terminated."
+        raise FSError("Process does not exist.")
+
+
 class MiniOS:
     USER_ACCOUNTS = {
         "admin": "admin123",
@@ -566,6 +616,11 @@ class MiniOS:
         self.register_command("systeminfo", self._systeminfo,
                               "Show simulated system information")
         self.register_command("exit", self._exit, "Shut down MiniOS")
+        # Newly implemented process-management commands.
+        self.process_manager = ProcessManager()
+        self.register_command("process", self._process, "List simulated processes")
+        self.register_command("run", self._run_process, "Start a process: run <name>")
+        self.register_command("kill", self._kill_process, "Terminate a process: kill <PID>")
 # --------------------------------------------------------------------------MEMORY MANAGEMENT 
         self.memory = MemoryManager()
         self.register_command("memory", self._memory, "Show memory status")
@@ -624,9 +679,33 @@ class MiniOS:
             f"  {name:<12} {description}"
             for name, (_, description) in sorted(self.commands.items())
         )
-        lines.extend(["", HELP_TEXT])
+        # Show the newly implemented process commands in the help output.
+        lines.extend([
+            "", "Process commands:",
+            "  process                   List simulated processes",
+            "  run <name>                Start a simulated process",
+            "  kill <PID>                Terminate a process",
+            "", HELP_TEXT,
+        ])
         return "\n".join(lines)
 # --------------------------------------------------------------------------MEMORY MANAGEMENT
+    # Newly implemented handlers for process-management commands.
+    def _process(self, args):
+        if args:
+            raise FSError("Usage: process")
+        return self.process_manager.list_processes()
+
+    def _run_process(self, args):
+        if not args:
+            raise FSError("Usage: run <name>")
+        # Join arguments to support process names containing spaces.
+        return self.process_manager.run_process(" ".join(args))
+
+    def _kill_process(self, args):
+        if len(args) != 1:
+            raise FSError("Usage: kill <PID>")
+        return self.process_manager.kill_process(args[0])
+
     def _memory(self, args):
         if args:
             raise FSError("Usage: memory")
@@ -723,11 +802,6 @@ class MiniOS:
                 print(self._exit([]))
                 return
             if not self.execute_line(line):
-                return
-
-
-if __name__ == "__main__":
-    MiniOS().run()
                 return
 
 
